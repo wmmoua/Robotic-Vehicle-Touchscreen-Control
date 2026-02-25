@@ -1,0 +1,72 @@
+import RPi.GPIO as GPIO
+import time
+
+# GPIO Pin Setup
+IN1, IN2 = 17, 18  # Motor A (Left)
+IN3, IN4 = 22, 23  # Motor B (Right)
+ENA, ENB = 27, 24  # PWM pins
+
+GPIO.setmode(GPIO.BCM)
+GPIO.setup([IN1, IN2, IN3, IN4, ENA, ENB], GPIO.OUT)
+
+# Setup PWM for full speed (100% duty cycle)
+pwm_ENA = GPIO.PWM(ENA, 1000)
+pwm_ENB = GPIO.PWM(ENB, 1000)
+pwm_ENA.start(100)  # Full speed (100%)
+pwm_ENB.start(100)  # Full speed (100%)
+
+# Motor Control Functions
+def move_forward(duration):
+    GPIO.output(IN1, GPIO.HIGH)
+    GPIO.output(IN2, GPIO.LOW)
+    GPIO.output(IN3, GPIO.HIGH)
+    GPIO.output(IN4, GPIO.LOW)
+    print("Moving Forward at Full Speed")
+    time.sleep(duration)
+    stop_motors()
+
+def move_backward(duration):
+    GPIO.output(IN1, GPIO.LOW)  # Motor A backward
+    GPIO.output(IN2, GPIO.HIGH)
+    GPIO.output(IN3, GPIO.LOW)  # Motor B backward
+    GPIO.output(IN4, GPIO.HIGH)
+    print("Moving Backward at Full Speed")
+    time.sleep(duration)
+    stop_motors()
+
+def turn_left(duration):
+    GPIO.output(IN3, GPIO.HIGH) # Right wheel moves forward
+    GPIO.output(IN4, GPIO.LOW)
+    GPIO.output(IN1, GPIO.LOW)
+    GPIO.output(IN2, GPIO.LOW)  # Left wheel stops
+    print("Turning Left at Full Speed")
+    time.sleep(duration)
+    stop_motors()
+
+def turn_right(duration):
+    GPIO.output(IN1, GPIO.HIGH) # Left wheel moves forward
+    GPIO.output(IN2, GPIO.LOW)
+    GPIO.output(IN3, GPIO.LOW)  # Right wheel stops
+    GPIO.output(IN4, GPIO.LOW)
+    print("Turning Right at Full Speed")
+    time.sleep(duration)
+    stop_motors()
+
+def stop_motors():
+    GPIO.output([IN1, IN2, IN3, IN4], GPIO.LOW)  # Ensure all pins are LOW
+    pwm_ENA.ChangeDutyCycle(0)  # Stop motor A completely
+    pwm_ENB.ChangeDutyCycle(0)  # Stop motor B completely
+    print("Stopping Motors")
+
+# Run the Movement Sequence
+try:
+    move_forward(5)    # Move forward for 5 seconds
+#    move_backward(5)  # Move backward for 5 seconds
+#    turn_left(5)      # Turn left for 5 seconds
+#    turn_right(5)     # Turn right for 5 seconds
+    stop_motors()      # Stop motors
+
+finally:
+    print("Cleaning up GPIO and stopping motors")
+    stop_motors()
+    GPIO.cleanup()
