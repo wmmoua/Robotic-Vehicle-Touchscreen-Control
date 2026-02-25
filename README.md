@@ -53,7 +53,7 @@ The goal is to reduce manpower risk in hazardous environments.
 ![Robotic_Vehicle](images/Robotic_Vehicle.png)
 
 ## Touchscreen GUI
-![Touchscreen]
+![Touchscreen](images/UI_With_Camera.png)
 
 ## Video Demo with no Camera
 ![Video](images/Car_Movement_Without_Camera.mp4)
