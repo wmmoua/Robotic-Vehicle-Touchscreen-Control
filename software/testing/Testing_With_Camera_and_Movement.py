@@ -1,0 +1,158 @@
+import pygame
+import RPi.GPIO as GPIO
+import time
+import sys
+import subprocess
+import threading
+import io
+from PIL import Image
+
+# GPIO Setup
+IN1, IN2 = 17, 18
+IN3, IN4 = 22, 23
+ENA, ENB = 27, 24
+
+GPIO.setmode(GPIO.BCM)
+GPIO.setup([IN1, IN2, IN3, IN4, ENA, ENB], GPIO.OUT)
+
+pwm_ENA = GPIO.PWM(ENA, 1000)
+pwm_ENB = GPIO.PWM(ENB, 1000)
+pwm_ENA.start(0)
+pwm_ENB.start(0)
+
+def move_forward():
+    GPIO.output(IN1, GPIO.HIGH)
+    GPIO.output(IN2, GPIO.LOW)
+    GPIO.output(IN3, GPIO.LOW)
+    GPIO.output(IN4, GPIO.HIGH)
+    pwm_ENA.ChangeDutyCycle(100)
+    pwm_ENB.ChangeDutyCycle(100)
+
+def turn_left():
+    GPIO.output(IN1, GPIO.LOW)
+    GPIO.output(IN2, GPIO.LOW)
+    GPIO.output(IN3, GPIO.LOW)
+    GPIO.output(IN4, GPIO.HIGH)
+    pwm_ENA.ChangeDutyCycle(100)
+    pwm_ENB.ChangeDutyCycle(100)
+
+def turn_right():
+    GPIO.output(IN1, GPIO.HIGH)
+    GPIO.output(IN2, GPIO.LOW)
+    GPIO.output(IN3, GPIO.LOW)
+    GPIO.output(IN4, GPIO.LOW)
+    pwm_ENA.ChangeDutyCycle(100)
+    pwm_ENB.ChangeDutyCycle(100)
+
+def stop_motors():
+    GPIO.output([IN1, IN2, IN3, IN4], GPIO.LOW)
+    pwm_ENA.ChangeDutyCycle(0)
+    pwm_ENB.ChangeDutyCycle(0)
+
+# Pygame UI Setup
+pygame.init()
+screen_width, screen_height = 900, 540
+screen = pygame.display.set_mode((screen_width, screen_height))
+pygame.display.set_caption("Robot Touch Controller")
+
+WHITE = (255, 255, 255)
+BLUE = (50, 120, 255)
+BG = (240, 240, 240)
+GRAY = (100, 100, 100)
+
+camera_height = 270
+forward_rect = pygame.Rect(360, 280, 180, 90)
+left_rect = pygame.Rect(80, 340, 180, 100)
+right_rect = pygame.Rect(640, 340, 180, 100)
+camera_button_rect = pygame.Rect(screen_width - 140, screen_height - 50, 130, 40)
+
+def draw_arrow(surface, points, color):
+    pygame.draw.polygon(surface, color, points)
+
+frame_surface = None
+camera_enabled = True
+running = True
+current_status = "Idle"
+font = pygame.font.Font(None, 26)
+
+def update_camera_frame():
+    global frame_surface
+    while running and camera_enabled:
+        try:
+            proc = subprocess.run(
+                ['libcamera-still', '-n', '-t', '1', '--width', str(screen_width), '--height', str(camera_height), '-o', '-'],
+                capture_output=True, check=True
+            )
+            img = Image.open(io.BytesIO(proc.stdout)).transpose(Image.ROTATE_180).convert("RGB")
+            img = img.resize((screen_width, camera_height))
+            frame_surface = pygame.image.fromstring(img.tobytes(), img.size, img.mode)
+        except Exception:
+            continue
+
+camera_thread = threading.Thread(target=update_camera_frame, daemon=True)
+camera_thread.start()
+
+try:
+    while running:
+        screen.fill(BG)
+        if camera_enabled and frame_surface:
+            screen.blit(frame_surface, (0, 0))
+
+        draw_arrow(screen, [(450, 290), (410, 360), (490, 360)], BLUE)
+        draw_arrow(screen, [(170, 400), (250, 370), (250, 430)], BLUE)
+        draw_arrow(screen, [(730, 400), (650, 370), (650, 430)], BLUE)
+
+        pygame.draw.rect(screen, GRAY, camera_button_rect, border_radius=8)
+        cam_text = font.render("Camera Off" if camera_enabled else "Camera On", True, WHITE)
+        screen.blit(cam_text, (camera_button_rect.x + 10, camera_button_rect.y + 10))
+
+        status_surface = font.render(f"Status: {current_status}", True, (0, 0, 0))
+        screen.blit(status_surface, (20, screen_height - 40))
+
+        pygame.display.flip()
+
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                running = False
+
+            elif event.type in (pygame.MOUSEBUTTONDOWN, pygame.FINGERDOWN):
+                if event.type == pygame.FINGERDOWN:
+                    x = int(event.x * screen_width)
+                    y = int(event.y * screen_height)
+                else:
+                    x, y = event.pos
+
+                if camera_button_rect.collidepoint(x, y):
+                    camera_enabled = not camera_enabled
+                    current_status = "Camera On" if camera_enabled else "Camera Off"
+                    if camera_enabled:
+                        frame_surface = None
+                        camera_thread = threading.Thread(target=update_camera_frame, daemon=True)
+                        camera_thread.start()
+                    else:
+                        frame_surface = None
+
+        pressed = pygame.mouse.get_pressed()[0]
+        x, y = pygame.mouse.get_pos()
+
+        if pressed:
+            if forward_rect.collidepoint(x, y):
+                move_forward()
+                current_status = "Moving Forward"
+            elif left_rect.collidepoint(x, y):
+                turn_left()
+                current_status = "Turning Left"
+            elif right_rect.collidepoint(x, y):
+                turn_right()
+                current_status = "Turning Right"
+        else:
+            stop_motors()
+            current_status = "Idle"
+
+        time.sleep(0.05)
+
+finally:
+    stop_motors()
+    GPIO.cleanup()
+    pygame.quit()
+    sys.exit()
